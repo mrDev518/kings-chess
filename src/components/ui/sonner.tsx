@@ -1,27 +1,20 @@
-import { useTheme } from "next-themes";
-import { Toaster as Sonner, toast } from "sonner";
+import * as React from 'react';
 
-type ToasterProps = React.ComponentProps<typeof Sonner>;
+export type ToastOptions = { description?: string };
 
-const Toaster = ({ ...props }: ToasterProps) => {
-  const { theme = "system" } = useTheme();
+function log(prefix: string, msg: string, opts?: ToastOptions) {
+  // eslint-disable-next-line no-console
+  console.log(`${prefix}`, msg, opts?.description ? `— ${opts.description}` : '');
+}
 
-  return (
-    <Sonner
-      theme={theme as ToasterProps["theme"]}
-      className="toaster group"
-      toastOptions={{
-        classNames: {
-          toast:
-            "group toast group-[.toaster]:bg-background group-[.toaster]:text-foreground group-[.toaster]:border-border group-[.toaster]:shadow-lg",
-          description: "group-[.toast]:text-muted-foreground",
-          actionButton: "group-[.toast]:bg-primary group-[.toast]:text-primary-foreground",
-          cancelButton: "group-[.toast]:bg-muted group-[.toast]:text-muted-foreground",
-        },
-      }}
-      {...props}
-    />
-  );
-};
+export const toast = Object.assign(
+  (msg: string, opts?: ToastOptions) => log('[toast]', msg, opts),
+  {
+    success: (msg: string, opts?: ToastOptions) => log('[toast:success]', msg, opts),
+    error:   (msg: string, opts?: ToastOptions) => log('[toast:error]', msg, opts),
+    info:    (msg: string, opts?: ToastOptions) => log('[toast:info]', msg, opts),
+    warning: (msg: string, opts?: ToastOptions) => log('[toast:warn]', msg, opts),
+  }
+);
 
-export { Toaster, toast };
+export const Toaster: React.FC = () => null; // renderless placeholder

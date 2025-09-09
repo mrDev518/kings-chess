@@ -1,61 +1,57 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { Card } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Palette } from 'lucide-react';
-
-export type PieceTheme = 'classic' | 'modern' | 'fantasy' | 'alpha';
+import { Button } from '@/components/ui/button';
+import { Palette, Check } from 'lucide-react';
+import type { PieceTheme } from '@/store/chessStore';
 
 interface PieceThemeSelectorProps {
   currentTheme: PieceTheme;
-  onThemeChange: (theme: PieceTheme) => void;
+  onThemeChange: (theme: PieceTheme) => void;   // called on Apply only
 }
 
-const themeOptions = [
-  { value: 'classic', label: 'Classic', description: 'Traditional chess pieces' },
-  { value: 'modern', label: 'Modern', description: 'Clean, minimalist design' },
-  { value: 'fantasy', label: 'Fantasy', description: 'Ornate, decorative pieces' },
-  { value: 'alpha', label: 'Alpha', description: 'Simple letter-based pieces' }
+const themeOptions: { value: PieceTheme; label: string; description: string }[] = [
+  { value: 'classic', label: 'Classic', description: 'Unicode pieces' },
+  { value: 'alpha',   label: 'Alpha',   description: 'Letters in tokens' },
+  { value: 'neo',     label: 'Neo',     description: 'Bold modern tokens' },
+  { value: 'solid',   label: 'Solid',   description: 'Solid disks + initials' },
+  { value: 'line',    label: 'Line',    description: 'Outlined initials' },
 ];
 
 export const PieceThemeSelector: React.FC<PieceThemeSelectorProps> = ({
   currentTheme,
-  onThemeChange
+  onThemeChange,
 }) => {
+  const [pending, setPending] = useState<PieceTheme>(currentTheme);
+  useEffect(() => setPending(currentTheme), [currentTheme]);
+
   return (
     <Card className="p-4">
+      <div className="flex items-center gap-2 mb-3">
+        <Palette className="h-4 w-4 text-primary" />
+        <h3 className="font-semibold">Piece Theme</h3>
+      </div>
+
       <div className="space-y-3">
-        <div className="flex items-center gap-2">
-          <Palette className="h-4 w-4 text-muted-foreground" />
-          <label className="text-sm font-medium text-muted-foreground">
-            Piece Theme
-          </label>
-        </div>
-        
-        <Select value={currentTheme} onValueChange={(value: PieceTheme) => onThemeChange(value)}>
+        <Select value={pending} onValueChange={(v) => setPending(v as PieceTheme)}>
           <SelectTrigger>
-            <SelectValue />
+            <SelectValue placeholder="Select theme..." />
           </SelectTrigger>
           <SelectContent>
-            {themeOptions.map((option) => (
-              <SelectItem key={option.value} value={option.value}>
+            {themeOptions.map(opt => (
+              <SelectItem key={opt.value} value={opt.value}>
                 <div className="flex flex-col">
-                  <span className="font-medium">{option.label}</span>
-                  <span className="text-xs text-muted-foreground">{option.description}</span>
+                  <span className="font-medium">{opt.label}</span>
+                  <span className="text-xs text-muted-foreground">{opt.description}</span>
                 </div>
               </SelectItem>
             ))}
           </SelectContent>
         </Select>
-        
-        {/* Theme Preview */}
-        <div className="flex justify-center gap-2 p-2 bg-muted/30 rounded-lg">
-          <span className="text-2xl">♔</span>
-          <span className="text-2xl">♕</span>
-          <span className="text-2xl">♖</span>
-          <span className="text-2xl">♗</span>
-          <span className="text-2xl">♘</span>
-          <span className="text-2xl">♙</span>
-        </div>
+
+        <Button onClick={() => onThemeChange(pending)} className="w-full">
+          <Check className="h-4 w-4 mr-2" /> Apply Theme
+        </Button>
       </div>
     </Card>
   );

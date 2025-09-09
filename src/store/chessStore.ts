@@ -1,10 +1,21 @@
 import { create } from 'zustand';
-import { Chess, Square, Move, PieceSymbol } from 'chess.js';
+import { Chess, Square, Move, PieceSymbol, Color } from 'chess.js';
 import { useStockfish } from '@/hooks/useStockfish';
 
 export type GameMode = 'friend' | 'bot';
 export type GameStatus = 'playing' | 'check' | 'checkmate' | 'stalemate' | 'draw';
-export type PieceTheme = 'classic' | 'modern' | 'fantasy' | 'alpha';
+export type PieceTheme = 'classic' | 'alpha' | 'neo' | 'solid' | 'line';
+export type PlayerSide = 'white' | 'black' | 'random';
+
+const ls = (k: string) => localStorage.getItem(k);
+
+// force default theme = line once
+if (ls('theme-migrated-line') !== '1') {
+  localStorage.setItem('chess-piece-theme', 'line');
+  localStorage.setItem('theme-migrated-line', '1');
+}
+
+interface PendingPromotion { from: Square; to: Square; color: 'w'|'b'; }
 
 interface GameState {
   chess: Chess;
@@ -17,24 +28,67 @@ interface GameState {
   currentPlayer: 'white' | 'black';
   isGameOver: boolean;
   winner: 'white' | 'black' | 'draw' | null;
-  promotionSquare: Square | null;
+
+  pendingPromotion: PendingPromotion | null;
+
+  // Settings
   pieceTheme: PieceTheme;
-  difficulty: number; // 0-20 (Stockfish skill level)
+  difficulty: number;
+  playerSide: PlayerSide;
+  botSide: Color;
+  viewSide: Color;
+
+  // Eval (centipawns White POV) and mate plies
+  evalCp: number | null;
+  evalMate: number | null;
+
+  // UI toggles
+  showEval: boolean;
+
   isThinking: boolean;
 }
 
 interface GameActions {
   setGameMode: (mode: GameMode) => void;
   selectSquare: (square: Square) => void;
+
   makeMove: (from: Square, to: Square, promotion?: PieceSymbol) => boolean;
-  makeBotMove: () => void;
+  confirmPromotion: (piece: PieceSymbol) => void;
+  cancelPromotion: () => void;
+
   undoMove: () => void;
   resetGame: () => void;
-  setPromotionSquare: (square: Square | null) => void;
+
   updateGameStatus: () => void;
+
   setPieceTheme: (theme: PieceTheme) => void;
   setDifficulty: (difficulty: number) => void;
+  setPlayerSide: (side: PlayerSide) => void;
+  applyStartingSide: () => void;
+
+  setShowEval: (v: boolean) => void;
+  toggleShowEval: () => void;
+
   makeStockfishMove: () => Promise<void>;
+  updateEvaluation: () => Promise<void>;
+}
+
+// simple local eval: material + tiny mobility (in centipawns)
+const PIECE_CP = { p:100, n:320, b:330, r:500, q:900, k:0 };
+function localEvalCp(chess: Chess): number {
+  let cp = 0;
+  const board = chess.board();
+  for (const row of board) {
+    for (const sq of row) {
+      if (!sq) continue;
+      const sign = sq.color === 'w' ? 1 : -1;
+      cp += sign * (PIECE_CP as any)[sq.type];
+    }
+  }
+  const legal = chess.moves({ verbose: true }) as Move[];
+  const mob = legal.length;
+  cp += (chess.turn() === 'w' ? 1 : -1) * Math.min(30, mob) * 1;
+  return cp;
 }
 
 const initialGameState: GameState = {
@@ -48,235 +102,282 @@ const initialGameState: GameState = {
   currentPlayer: 'white',
   isGameOver: false,
   winner: null,
-  promotionSquare: null,
-  pieceTheme: 'classic',
-  difficulty: 10, // Medium difficulty by default
+
+  pendingPromotion: null,
+
+  pieceTheme: (ls('chess-piece-theme') as PieceTheme) || 'line',
+  difficulty: Number(ls('chess-difficulty') || 1350),
+  playerSide: (ls('chess-player-side') as PlayerSide) || 'white',
+  botSide: 'b',
+  viewSide: 'w',
+
+  evalCp: 0,
+  evalMate: null,
+
+  showEval: (ls('chess-show-eval') ?? '1') !== '0', // default: shown
+
   isThinking: false,
 };
-
-// Simple Stockfish fallback - uses random moves for now
-// TODO: Integrate proper Stockfish WebAssembly engine
-const getStockfishEngine = async () => null;
 
 export const useChessStore = create<GameState & GameActions>((set, get) => ({
   ...initialGameState,
 
-  setGameMode: (mode: GameMode) => {
-    set({ gameMode: mode });
+  setGameMode: (mode) => {
+    set({ gameMode: mode, selectedSquare: null, validMoves: [] });
+    const { chess, botSide } = get();
+    if (mode === 'bot' && chess.turn() === botSide) {
+      get().makeStockfishMove();
+    } else {
+      get().updateEvaluation();
+    }
   },
 
-  selectSquare: (square: Square) => {
-    const { chess, selectedSquare, gameMode } = get();
-    
-    // Don't allow selection if it's bot's turn in bot mode
-    if (gameMode === 'bot' && chess.turn() === 'b') {
-      return;
-    }
+  selectSquare: (square) => {
+    const { chess, selectedSquare, gameMode, botSide } = get();
+    if (gameMode === 'bot' && chess.turn() === botSide) return;
 
-    // If clicking the same square, deselect
-    if (selectedSquare === square) {
-      set({ selectedSquare: null, validMoves: [] });
-      return;
-    }
-
-    // If a square is already selected, try to make a move
     if (selectedSquare) {
-      const moveSuccessful = get().makeMove(selectedSquare, square);
-      if (moveSuccessful) {
-        set({ selectedSquare: null, validMoves: [] });
-        return;
-      }
+      const moved = get().makeMove(selectedSquare, square);
+      if (moved) set({ selectedSquare: null, validMoves: [] });
+      else set({ selectedSquare: get().pendingPromotion ? selectedSquare : null });
+      return;
     }
 
-    // Select new square if it has a piece of the current player
     const piece = chess.get(square);
     if (piece && piece.color === chess.turn()) {
-      const moves = chess.moves({ 
-        square, 
-        verbose: true 
-      }) as Move[];
-      
-      const validMoves = moves.map(move => move.to);
-      
-      set({ 
-        selectedSquare: square, 
-        validMoves 
-      });
+      const moves = chess.moves({ square, verbose: true }) as Move[];
+      set({ selectedSquare: square, validMoves: moves.map(m => m.to as Square) });
     } else {
       set({ selectedSquare: null, validMoves: [] });
     }
   },
 
-  makeMove: (from: Square, to: Square, promotion?: PieceSymbol) => {
-    const { chess } = get();
-    
+  makeMove: (from, to, promotion) => {
+    const { chess, botSide, gameMode } = get();
     try {
-      // Check if this is a pawn promotion
-      const piece = chess.get(from);
-      const isPromotion = piece?.type === 'p' && 
-        ((piece.color === 'w' && to[1] === '8') || 
-         (piece.color === 'b' && to[1] === '1'));
+      const moving = chess.get(from);
+      const isPawn = moving?.type === 'p';
+      const aboutToPromote = isPawn && ((moving!.color === 'w' && to[1] === '8') || (moving!.color === 'b' && to[1] === '1'));
 
-      if (isPromotion && !promotion) {
-        // Set promotion square to show promotion dialog
-        set({ promotionSquare: to });
+      if (aboutToPromote && !promotion) {
+        set({ pendingPromotion: { from, to, color: moving!.color } });
         return false;
       }
 
-      const moveOptions: any = { from, to };
-      if (promotion) {
-        moveOptions.promotion = promotion;
-      }
+      const move = chess.move({ from, to, promotion });
+      if (!move) return false;
 
-      const move = chess.move(moveOptions);
-      
-      if (move) {
-        const history = chess.history();
-        set({ 
-          lastMove: { from, to },
-          history,
-          currentPlayer: chess.turn() === 'w' ? 'white' : 'black',
-          promotionSquare: null
-        });
-        
-        get().updateGameStatus();
-        
-        // Make bot move after a short delay if in bot mode
-        if (get().gameMode === 'bot' && chess.turn() === 'b' && !get().isGameOver) {
-          setTimeout(() => {
-            get().makeStockfishMove();
-          }, 800);
-        }
-        
-        return true;
-      }
-    } catch (error) {
-      console.error('Invalid move:', error);
-    }
-    
-    return false;
-  },
-
-  makeBotMove: () => {
-    // Fallback to random move if Stockfish fails
-    const { chess } = get();
-    
-    if (chess.turn() !== 'b' || get().isGameOver) {
-      return;
-    }
-
-    const moves = chess.moves({ verbose: true }) as Move[];
-    
-    if (moves.length > 0) {
-      const randomMove = moves[Math.floor(Math.random() * moves.length)];
-      
-      const moveOptions: any = {
-        from: randomMove.from,
-        to: randomMove.to
-      };
-      
-      if (randomMove.promotion) {
-        moveOptions.promotion = randomMove.promotion;
-      }
-
-      chess.move(moveOptions);
-      
       const history = chess.history();
+      const moves = chess.history({ verbose: true }) as Move[];
+      const lastMove = moves.length ? { from: moves[moves.length - 1].from, to: moves[moves.length - 1].to } : null;
+
       set({
-        lastMove: { from: randomMove.from, to: randomMove.to },
+        lastMove,
         history,
-        currentPlayer: 'white',
-        isThinking: false
+        selectedSquare: null,
+        validMoves: [],
+        currentPlayer: chess.turn() === 'w' ? 'white' : 'black',
+        pendingPromotion: null,
       });
-      
+
       get().updateGameStatus();
+
+      if (gameMode === 'bot' && chess.turn() === botSide) {
+        get().makeStockfishMove();
+      } else {
+        get().updateEvaluation();
+      }
+      return true;
+    } catch {
+      return false;
     }
   },
 
-  makeStockfishMove: async () => {
-    // Fallback to random move for now - Stockfish integration pending
-    get().makeBotMove();
+  confirmPromotion: (piece) => {
+    const { pendingPromotion } = get();
+    if (!pendingPromotion) return;
+
+    const { chess } = get();
+    chess.move({ from: pendingPromotion.from, to: pendingPromotion.to, promotion: piece });
+
+    const moves = chess.history({ verbose: true }) as Move[];
+    const lastMove = moves.length ? { from: moves[moves.length - 1].from, to: moves[moves.length - 1].to } : null;
+
+    set({
+      lastMove,
+      history: chess.history(),
+      currentPlayer: chess.turn() === 'w' ? 'white' : 'black',
+      pendingPromotion: null,
+    });
+
+    get().updateGameStatus();
+    get().updateEvaluation();
   },
+
+  cancelPromotion: () => set({ pendingPromotion: null }),
 
   undoMove: () => {
-    const { chess } = get();
-    
-    // In bot mode, undo two moves (player + bot)
-    if (get().gameMode === 'bot') {
-      chess.undo(); // Undo bot move
-      chess.undo(); // Undo player move
+    const { chess, gameMode, botSide } = get();
+    if (gameMode === 'bot') {
+      if (chess.turn() !== botSide) { chess.undo(); chess.undo(); }
+      else { chess.undo(); }
     } else {
-      chess.undo(); // Undo one move in friend mode
+      chess.undo();
     }
-    
+
     const history = chess.history();
     const moves = chess.history({ verbose: true }) as Move[];
-    const lastMove = moves.length > 0 ? 
-      { from: moves[moves.length - 1].from, to: moves[moves.length - 1].to } : 
-      null;
-    
+    const lastMove = moves.length ? { from: moves[moves.length - 1].from, to: moves[moves.length - 1].to } : null;
+
     set({
-      history,
-      lastMove,
+      history, lastMove,
       currentPlayer: chess.turn() === 'w' ? 'white' : 'black',
-      selectedSquare: null,
-      validMoves: [],
-      promotionSquare: null
+      gameStatus: 'playing', isGameOver: false, winner: null,
+      selectedSquare: null, validMoves: [], pendingPromotion: null,
     });
-    
-    get().updateGameStatus();
+
+    get().updateEvaluation();
   },
 
   resetGame: () => {
     const newChess = new Chess();
     set({
-      ...initialGameState,
       chess: newChess,
-      gameMode: get().gameMode, // Keep current game mode
-      pieceTheme: get().pieceTheme, // Keep current piece theme
-      difficulty: get().difficulty, // Keep current difficulty
+      gameStatus: 'playing',
+      selectedSquare: null, validMoves: [],
+      lastMove: null, history: [],
+      currentPlayer: 'white', isGameOver: false, winner: null,
+      pendingPromotion: null,
+      evalCp: 0,
+      evalMate: null,
     });
-  },
 
-  setPromotionSquare: (square: Square | null) => {
-    set({ promotionSquare: square });
+    const { gameMode, botSide } = get();
+    if (gameMode === 'bot' && newChess.turn() === botSide) {
+      get().makeStockfishMove();
+    } else {
+      get().updateEvaluation();
+    }
   },
 
   updateGameStatus: () => {
     const { chess } = get();
-    
     let gameStatus: GameStatus = 'playing';
     let isGameOver = false;
-    let winner: 'white' | 'black' | 'draw' | null = null;
+    let winner: GameState['winner'] = null;
 
-    if (chess.isCheckmate()) {
-      gameStatus = 'checkmate';
-      isGameOver = true;
-      winner = chess.turn() === 'w' ? 'black' : 'white';
-    } else if (chess.isStalemate() || chess.isThreefoldRepetition() || chess.isInsufficientMaterial()) {
-      gameStatus = 'stalemate';
-      isGameOver = true;
-      winner = 'draw';
-    } else if (chess.isDraw()) {
-      gameStatus = 'draw';
-      isGameOver = true;
-      winner = 'draw';
-    } else if (chess.inCheck()) {
-      gameStatus = 'check';
-    }
+    if (chess.isCheckmate()) { gameStatus = 'checkmate'; isGameOver = true; winner = chess.turn() === 'w' ? 'black' : 'white'; }
+    else if (chess.isStalemate()) { gameStatus = 'stalemate'; isGameOver = true; winner = 'draw'; }
+    else if (chess.isDraw()) { gameStatus = 'draw'; isGameOver = true; winner = 'draw'; }
+    else if (chess.inCheck()) { gameStatus = 'check'; }
 
     set({ gameStatus, isGameOver, winner });
   },
 
-  setPieceTheme: (theme: PieceTheme) => {
+  setPieceTheme: (theme) => {
     set({ pieceTheme: theme });
-    // Persist to localStorage
     localStorage.setItem('chess-piece-theme', theme);
   },
 
-  setDifficulty: (difficulty: number) => {
-    set({ difficulty });
-    // Persist to localStorage
-    localStorage.setItem('chess-difficulty', difficulty.toString());
+  setDifficulty: (difficulty) => {
+    const rating = Math.max(200, Math.min(2500, Math.round(difficulty)));
+    set({ difficulty: rating });
+    localStorage.setItem('chess-difficulty', rating.toString());
+    get().updateEvaluation();
+  },
+
+  setPlayerSide: (side) => {
+    set({ playerSide: side });
+    localStorage.setItem('chess-player-side', side);
+  },
+
+  applyStartingSide: () => {
+    const { playerSide, gameMode } = get();
+    let botSide: Color; let viewSide: Color;
+    if (playerSide === 'white') { botSide = 'b'; viewSide = 'w'; }
+    else if (playerSide === 'black') { botSide = 'w'; viewSide = 'b'; }
+    else { botSide = Math.random() < 0.5 ? 'w' : 'b'; viewSide = botSide === 'w' ? 'b' : 'w'; }
+    set({ botSide, viewSide });
+    get().resetGame();
+    if (gameMode === 'bot') {
+      const { chess } = get();
+      if (chess.turn() === botSide) get().makeStockfishMove();
+    } else {
+      get().updateEvaluation();
+    }
+  },
+
+  setShowEval: (v) => {
+    set({ showEval: v });
+    localStorage.setItem('chess-show-eval', v ? '1' : '0');
+  },
+  toggleShowEval: () => {
+    const v = !get().showEval;
+    set({ showEval: v });
+    localStorage.setItem('chess-show-eval', v ? '1' : '0');
+  },
+
+  makeStockfishMove: async () => {
+    const { chess, difficulty, isGameOver, botSide } = get();
+    if (isGameOver) return;
+    if (chess.turn() !== botSide) return;
+
+    set({ isThinking: true });
+    try {
+      const sf = useStockfish();
+      const rating = Math.max(200, Math.min(2500, Math.round(difficulty)));
+      await sf.setRating(rating);
+
+      const fen = chess.fen();
+      let best = await sf.getBestMove(fen, 1200);
+
+      if (!best) {
+        const legal = chess.moves({ verbose: true }) as Move[];
+        if (!legal.length) return;
+        const pick = legal[Math.floor(Math.random() * legal.length)];
+        best = `${pick.from}${pick.to}${pick.promotion ?? ''}`;
+      }
+
+      if (chess.turn() !== botSide) return;
+
+      const from = best.substring(0, 2) as Square;
+      const to = best.substring(2, 4) as Square;
+      const promo = best.length > 4 ? (best[4] as PieceSymbol) : undefined;
+
+      chess.move({ from, to, promotion: promo });
+
+      const moves = chess.history({ verbose: true }) as Move[];
+      const lastMove = moves.length ? { from: moves[moves.length - 1].from, to: moves[moves.length - 1].to } : null;
+
+      set({
+        lastMove,
+        history: chess.history(),
+        currentPlayer: chess.turn() === 'w' ? 'white' : 'black',
+      });
+
+      get().updateGameStatus();
+    } finally {
+      set({ isThinking: false });
+      await get().updateEvaluation();
+    }
+  },
+
+  updateEvaluation: async () => {
+    const { chess, difficulty } = get();
+    // First try remote
+    try {
+      const sf = useStockfish();
+      const rating = Math.max(200, Math.min(2500, Math.round(difficulty)));
+      await sf.setRating(rating);
+      const { cp, mate } = await sf.getEvaluation(chess.fen());
+      if (cp !== null || mate !== null) {
+        set({ evalCp: cp, evalMate: mate });
+        return;
+      }
+    } catch { /* ignore, use local */ }
+
+    // Fallback: local heuristic so the bar always moves
+    const localCp = localEvalCp(chess);
+    set({ evalCp: localCp, evalMate: null });
   },
 }));
