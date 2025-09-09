@@ -1,0 +1,235 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Chess Game Design System - Dark theme with gold/green accents
+All colors MUST be HSL.
+*/
+
+@layer base {
+  :root {
+    /* Core Chess Theme - Dark Background */
+    --background: 228 25% 8%;
+    --foreground: 45 100% 95%;
+
+    /* Chess Board Colors */
+    --board-light: 45 25% 85%;
+    --board-dark: 25 30% 25%;
+    --board-border: 25 20% 15%;
+    
+    /* Chess Piece Colors */
+    --piece-light: 0 0% 98%;
+    --piece-dark: 0 0% 8%;
+    
+    /* Game Status Colors */
+    --gold: 45 100% 55%;
+    --gold-dark: 45 80% 45%;
+    --gold-light: 45 100% 70%;
+    
+    --success: 120 50% 45%;
+    --success-light: 120 50% 60%;
+    
+    --danger: 0 80% 60%;
+    --warning: 35 100% 55%;
+
+    /* UI Components */
+    --card: 228 20% 12%;
+    --card-foreground: 45 100% 95%;
+
+    --popover: 228 20% 12%;
+    --popover-foreground: 45 100% 95%;
+
+    --primary: 45 100% 55%;
+    --primary-foreground: 228 25% 8%;
+
+    --secondary: 228 15% 18%;
+    --secondary-foreground: 45 90% 85%;
+
+    --muted: 228 15% 15%;
+    --muted-foreground: 45 20% 65%;
+
+    --accent: 120 50% 45%;
+    --accent-foreground: 45 100% 95%;
+
+    --destructive: 0 80% 60%;
+    --destructive-foreground: 45 100% 95%;
+
+    --border: 228 15% 20%;
+    --input: 228 15% 18%;
+    --ring: 45 100% 55%;
+
+    --radius: 0.75rem;
+    
+    /* Chess-specific UI states */
+    --selected: 45 100% 55%;
+    --valid-move: 120 50% 45%;
+    --last-move: 45 80% 45%;
+    --check: 0 80% 60%;
+    
+    /* Game status & thinking indicator */
+    --thinking: 120 50% 45%;
+    
+    /* Gradients */
+    --gradient-gold: linear-gradient(135deg, hsl(45 100% 55%), hsl(45 80% 45%));
+    --gradient-board: linear-gradient(145deg, hsl(228 20% 12%), hsl(228 15% 8%));
+    --gradient-card: linear-gradient(145deg, hsl(228 20% 12%), hsl(228 15% 10%));
+    
+    /* Shadows */
+    --shadow-piece: 0 4px 12px hsl(0 0% 0% / 0.4);
+    --shadow-board: 0 8px 32px hsl(0 0% 0% / 0.6);
+    --shadow-card: 0 4px 16px hsl(0 0% 0% / 0.3);
+    
+    /* Transitions */
+    --transition-smooth: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    --transition-piece: transform 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+
+    --radius: 0.75rem;
+
+    --sidebar-background: 0 0% 98%;
+
+    --sidebar-foreground: 240 5.3% 26.1%;
+
+    --sidebar-primary: 240 5.9% 10%;
+
+    --sidebar-primary-foreground: 0 0% 98%;
+
+    --sidebar-accent: 240 4.8% 95.9%;
+
+    --sidebar-accent-foreground: 240 5.9% 10%;
+
+    --sidebar-border: 220 13% 91%;
+
+    --sidebar-ring: 217.2 91.2% 59.8%;
+  }
+
+  .dark {
+    /* Use same colors as light mode for chess game - we want consistent dark theme */
+    --background: 228 25% 8%;
+    --foreground: 45 100% 95%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground font-sans antialiased;
+    background: var(--gradient-board);
+    min-height: 100vh;
+  }
+}
+
+@layer components {
+  /* Chess Board Styles */
+  .chess-square {
+    @apply relative flex items-center justify-center transition-all duration-200;
+    width: 100%;
+    height: 100%;
+  }
+  
+  .chess-square.light {
+    background-color: hsl(var(--board-light));
+  }
+  
+  .chess-square.dark {
+    background-color: hsl(var(--board-dark));
+  }
+  
+  .chess-square.selected {
+    background-color: hsl(var(--selected) / 0.7) !important;
+    box-shadow: inset 0 0 0 3px hsl(var(--selected));
+  }
+  
+  .chess-square.valid-move {
+    position: relative;
+  }
+  
+  .chess-square.valid-move::after {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 20px;
+    height: 20px;
+    background-color: hsl(var(--valid-move) / 0.8);
+    border-radius: 50%;
+  }
+  
+  .chess-square.valid-move.has-piece::after {
+    width: 80%;
+    height: 80%;
+    background-color: transparent;
+    border: 3px solid hsl(var(--valid-move));
+    border-radius: 50%;
+  }
+  
+  .chess-square.last-move {
+    background-color: hsl(var(--last-move) / 0.4) !important;
+  }
+  
+  .chess-square.in-check {
+    background-color: hsl(var(--check) / 0.6) !important;
+    animation: pulse-check 1s ease-in-out infinite;
+  }
+  
+  /* Chess Piece Styles */
+  .chess-piece {
+    @apply cursor-pointer select-none transition-all duration-200;
+    filter: drop-shadow(var(--shadow-piece));
+    font-size: 2.5rem;
+    line-height: 1;
+  }
+  
+  .chess-piece:hover {
+    transform: scale(1.05);
+  }
+  
+  .chess-piece.dragging {
+    transform: scale(1.1);
+    z-index: 50;
+  }
+  
+  /* Game Status Styles */
+  .game-status {
+    @apply text-center p-4 rounded-lg font-semibold;
+    background: var(--gradient-card);
+    border: 1px solid hsl(var(--border));
+  }
+  
+  .game-status.white-turn {
+    color: hsl(var(--gold));
+  }
+  
+  .game-status.black-turn {
+    color: hsl(var(--foreground));
+  }
+  
+  .game-status.check {
+    color: hsl(var(--check));
+    animation: pulse-check 1s ease-in-out infinite;
+  }
+  
+  .game-status.checkmate {
+    color: hsl(var(--danger));
+    font-weight: bold;
+  }
+  
+  /* Animations */
+  @keyframes pulse-check {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.7; }
+  }
+  
+  @keyframes piece-move {
+    0% { transform: scale(1); }
+    50% { transform: scale(1.1); }
+    100% { transform: scale(1); }
+  }
+  
+  .piece-move-animation {
+    animation: piece-move 0.3s ease-in-out;
+  }
+}
