@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Square, Move } from 'chess.js';
 import { useChessStore } from '@/store/chessStore';
 import { ChessPiece } from './ChessPiece';
-import { Sparkles, Settings2, Sun, Moon } from 'lucide-react';
+import { Sun, Moon } from 'lucide-react';
 
 // NOTE: board orientation now depends on viewSide ('w' bottom or 'b' bottom)
 
@@ -13,94 +13,6 @@ const readBool = (k: string, def = false) => {
   return v == null ? def : v === 'true';
 };
 const writeBool = (k: string, v: boolean) => localStorage.setItem(k, String(v));
-
-const readVol = (k: string, def = 0.8) => {
-  const raw = localStorage.getItem(k);
-  const n = raw ? Number(raw) : def;
-  return Number.isFinite(n) ? Math.max(0, Math.min(1, n)) : def;
-};
-
-const useAudio = (vols: { clank: number; gasp: number; rumble: number; swoosh: number; vuvu: number }) => {
-  const ctxRef = useRef<AudioContext | null>(null);
-  const getCtx = () => {
-    if (!ctxRef.current) {
-      const AC = (window as any).AudioContext || (window as any).webkitAudioContext;
-      ctxRef.current = new AC();
-    }
-    return ctxRef.current!;
-  };
-
-  // sword clank (capture)
-  const swordClank = () => {
-    if (vols.clank <= 0) return;
-    const ctx = getCtx();
-    const now = ctx.currentTime;
-    const ping = (f: number, t0: number) => {
-      const o = ctx.createOscillator(); const g = ctx.createGain();
-      o.type = 'square'; o.frequency.setValueAtTime(f, now + t0);
-      g.gain.setValueAtTime(0.0001, now + t0);
-      g.gain.exponentialRampToValueAtTime(0.18 * vols.clank, now + t0 + 0.02);
-      g.gain.exponentialRampToValueAtTime(0.0001, now + t0 + 0.15);
-      o.connect(g).connect(ctx.destination); o.start(now + t0); o.stop(now + t0 + 0.2);
-    };
-    const noise = ctx.createBufferSource();
-    const buffer = ctx.createBuffer(1, ctx.sampleRate * 0.08, ctx.sampleRate);
-    const data = buffer.getChannelData(0);
-    for (let i = 0; i < data.length; i++) data[i] = (Math.random() * 2 - 1) * Math.exp(-i / (data.length * 0.6));
-    noise.buffer = buffer; const ng = ctx.createGain(); ng.gain.value = 0.2 * vols.clank;
-    noise.connect(ng).connect(ctx.destination); ping(1200, 0); ping(900, 0.03); noise.start(now + 0.01);
-  };
-  // gasp (check)
-  const gasp = () => {
-    if (vols.gasp <= 0) return;
-    const ctx = getCtx(); const now = ctx.currentTime;
-    const o = ctx.createOscillator(); const g = ctx.createGain();
-    o.type = 'sine'; o.frequency.setValueAtTime(600, now); o.frequency.exponentialRampToValueAtTime(280, now + 0.25);
-    g.gain.setValueAtTime(0.0001, now); g.gain.exponentialRampToValueAtTime(0.22 * vols.gasp, now + 0.03);
-    g.gain.exponentialRampToValueAtTime(0.0001, now + 0.35);
-    o.connect(g).connect(ctx.destination); o.start(now); o.stop(now + 0.36);
-  };
-  const rumble = () => {
-    if (vols.rumble <= 0) return;
-    const ctx = getCtx(); const now = ctx.currentTime;
-    const o = ctx.createOscillator(); const g = ctx.createGain();
-    o.type = 'sawtooth'; o.frequency.setValueAtTime(55, now);
-    g.gain.setValueAtTime(0.0001, now); g.gain.exponentialRampToValueAtTime(0.2 * vols.rumble, now + 0.05);
-    g.gain.exponentialRampToValueAtTime(0.0001, now + 0.4);
-    o.connect(g).connect(ctx.destination); o.start(now); o.stop(now + 0.45);
-  };
-  const swoosh = () => {
-    if (vols.swoosh <= 0) return;
-    const ctx = getCtx(); const now = ctx.currentTime;
-    const o = ctx.createOscillator(); const g = ctx.createGain();
-    o.type = 'triangle'; o.frequency.setValueAtTime(1200, now); o.frequency.exponentialRampToValueAtTime(300, now + 0.35);
-    g.gain.setValueAtTime(0.0001, now); g.gain.exponentialRampToValueAtTime(0.18 * vols.swoosh, now + 0.03);
-    g.gain.exponentialRampToValueAtTime(0.0001, now + 0.4);
-    o.connect(g).connect(ctx.destination); o.start(now); o.stop(now + 0.45);
-  };
-  const vuvuzela = () => {
-    if (vols.vuvu <= 0) return;
-    const ctx = getCtx(); const now = ctx.currentTime;
-    const mk = (f: number, gpeak: number, d: number) => {
-      const o = ctx.createOscillator(); const g = ctx.createGain();
-      o.type = 'square'; o.frequency.setValueAtTime(f, now);
-      g.gain.setValueAtTime(0.0001, now); g.gain.exponentialRampToValueAtTime(gpeak * vols.vuvu, now + 0.06);
-      g.gain.exponentialRampToValueAtTime(0.0001, now + d);
-      o.connect(g).connect(ctx.destination); o.start(now); o.stop(now + d + 0.02);
-    };
-    mk(235, 0.12, 0.9); mk(470, 0.06, 0.7); mk(705, 0.03, 0.6);
-  };
-
-  return { swordClank, gasp, rumble, swoosh, vuvuzela };
-};
-
-const FXSlider: React.FC<{ label: string; value: number; onChange: (v: number) => void }> = ({ label, value, onChange }) => (
-  <div className="space-y-1">
-    <div className="text-xs text-muted-foreground">{label}</div>
-    <input type="range" min={0} max={100} value={Math.round(value * 100)}
-      onChange={(e) => onChange(Math.max(0, Math.min(1, Number(e.target.value) / 100)))} className="w-full" />
-  </div>
-);
 
 export const ChessBoard: React.FC = () => {
   const { chess, selectedSquare, validMoves, lastMove, gameStatus, selectSquare, viewSide } = useChessStore();
@@ -113,17 +25,9 @@ export const ChessBoard: React.FC = () => {
   const [lightMode, setLightMode] = useState(readBool('chess-light-mode', false));
   useEffect(() => writeBool('chess-light-mode', lightMode), [lightMode]);
 
-  // FX + volumes (kept)
-  const [showFX, setShowFX] = useState(false);
-  const [clankVol, setClankVol] = useState(readVol('fx-vol-clank', 0.9));
-  const [gaspVol, setGaspVol] = useState(readVol('fx-vol-gasp', 0.8));
-  const [rumbleVol, setRumbleVol] = useState(readVol('fx-vol-rumble', 0.9));
-  const [swooshVol, setSwooshVol] = useState(readVol('fx-vol-swoosh', 0.8));
-  const [vuvuVol, setVuvuVol] = useState(readVol('fx-vol-vuvuzela', 0.5));
-
-  const { swordClank, gasp, rumble, swoosh, vuvuzela } = useAudio({
-    clank: clankVol, gasp: gaspVol, rumble: rumbleVol, swoosh: swooshVol, vuvu: vuvuVol,
-  });
+  // Always-on move sounds (pawn vs. other pieces)
+  const pawnAudioRef = useRef<HTMLAudioElement | null>(null);
+  const pieceAudioRef = useRef<HTMLAudioElement | null>(null);
 
   const squareRefs = useRef<Record<string, HTMLDivElement | null>>({});
   const boardRef = useRef<HTMLDivElement | null>(null);
@@ -136,11 +40,15 @@ export const ChessBoard: React.FC = () => {
     return moves.length ? moves[moves.length - 1] : null;
   }, [chess, chess.history().length]);
 
+  // Visual effects (particles) + play sounds per moved piece
   useEffect(() => {
     if (!lastVerboseMove) return;
+
     const flags = (lastVerboseMove as any).flags as string;
     const to = lastVerboseMove.to as string;
+    const movedPiece = (lastVerboseMove as any).piece as string; // 'p','r','n','b','q','k'
 
+    // Particles on capture (no synth sound anymore)
     if (flags.includes('c') || flags.includes('e')) {
       const el = squareRefs.current[to];
       if (el && boardRef.current) {
@@ -153,25 +61,31 @@ export const ChessBoard: React.FC = () => {
           id: particleId.current++, x, y, hue: Math.floor(Math.random() * 360), createdAt: now
         }));
         setParticles(prev => [...prev, ...burst]);
-        swordClank();
       }
     }
 
+    // Simple board shake on castling (kept visual only; no audio)
     if (flags.includes('k') || flags.includes('q')) {
-      rumble();
       if (boardRef.current) {
         boardRef.current.classList.add('rumble');
         setTimeout(() => boardRef.current && boardRef.current.classList.remove('rumble'), 420);
       }
     }
 
-    if (flags.includes('e')) swoosh();
-    if ((lastVerboseMove as any).promotion) vuvuzela();
+    // Play move sound: pawn vs other pieces
+    const play = (el: HTMLAudioElement | null) => {
+      if (!el) return;
+      try { el.currentTime = 0; el.play(); } catch {}
+    };
+    if (movedPiece === 'p') {
+      play(pawnAudioRef.current);
+    } else {
+      play(pieceAudioRef.current);
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [lastVerboseMove?.san]);
 
-  useEffect(() => { if (gameStatus === 'check') gasp(); }, [gameStatus]); // gasp on check
-
+  // Particle cleanup
   useEffect(() => {
     if (particles.length === 0) return;
     const t = setInterval(() => {
@@ -221,14 +135,7 @@ export const ChessBoard: React.FC = () => {
         {lightMode ? 'Light' : 'Dark'}
       </button>
 
-      {/* FX toggle */}
-      <button
-        onClick={() => setShowFX(v => !v)}
-        className="absolute -top-3 right-0 z-20 text-xs px-2 py-1 rounded-full bg-primary text-primary-foreground flex items-center gap-1 shadow"
-        title="Toggle board effects panel"
-      >
-        <Sparkles className="h-3 w-3" /> FX
-      </button>
+      {/* (FX toggle removed by request) */}
 
       <div
         ref={boardRef}
@@ -309,6 +216,10 @@ export const ChessBoard: React.FC = () => {
           })}
         </div>
       </div>
+
+      {/* Hidden audio elements (always on) */}
+      <audio ref={pawnAudioRef} src="/assets/sounds/pawn-move.mp3" preload="auto" />
+      <audio ref={pieceAudioRef} src="/assets/sounds/piece-move.mp3" preload="auto" />
     </div>
   );
 };

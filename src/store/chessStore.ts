@@ -4,7 +4,7 @@ import { useStockfish } from '@/hooks/useStockfish';
 
 export type GameMode = 'friend' | 'bot';
 export type GameStatus = 'playing' | 'check' | 'checkmate' | 'stalemate' | 'draw';
-export type PieceTheme = 'classic' | 'alpha' | 'neo' | 'solid' | 'line';
+export type PieceTheme = 'classic' | 'line';
 export type PlayerSide = 'white' | 'black' | 'random';
 
 const ls = (k: string) => localStorage.getItem(k);
@@ -41,7 +41,10 @@ interface GameState {
   // Eval (centipawns White POV) and mate plies
   evalCp: number | null;
   evalMate: number | null;
-
+  clockEnabled: boolean;
+  clockMinutes: 3 | 10;
+  timeWhite: number; // ms
+  timeBlack: number; // ms
   // UI toggles
   showEval: boolean;
 
@@ -68,6 +71,11 @@ interface GameActions {
 
   setShowEval: (v: boolean) => void;
   toggleShowEval: () => void;
+// Clock actions
+  setClockEnabled: (v: boolean) => void;
+  setClockMinutes: (m: 3 | 10) => void;
+  resetClock: () => void;
+  tickClock: (deltaMs: number) => void;
 
   makeStockfishMove: () => Promise<void>;
   updateEvaluation: () => Promise<void>;
@@ -102,6 +110,10 @@ const initialGameState: GameState = {
   currentPlayer: 'white',
   isGameOver: false,
   winner: null,
+  clockEnabled: false,
+  clockMinutes: 3,
+  timeWhite: 3*60*1000,
+  timeBlack: 3*60*1000,
 
   pendingPromotion: null,
 
@@ -121,6 +133,29 @@ const initialGameState: GameState = {
 
 export const useChessStore = create<GameState & GameActions>((set, get) => ({
   ...initialGameState,
+setClockEnabled: (v) => {
+  set({ clockEnabled: v });
+},
+setClockMinutes: (m) => {
+  set({ clockMinutes: m, timeWhite: m*60*1000, timeBlack: m*60*1000 });
+},
+resetClock: () => {
+  const m = get().clockMinutes;
+  set({ timeWhite: m*60*1000, timeBlack: m*60*1000 });
+},
+tickClock: (deltaMs) => {
+  const { clockEnabled, chess, timeWhite, timeBlack, isGameOver } = get();
+  if (!clockEnabled || isGameOver) return;
+  if (chess.turn() === 'w') {
+    const t = Math.max(0, timeWhite - deltaMs);
+    set({ timeWhite: t });
+    if (t === 0) set({ isGameOver: true, winner: 'black', gameStatus: 'checkmate' });
+  } else {
+    const t = Math.max(0, timeBlack - deltaMs);
+    set({ timeBlack: t });
+    if (t === 0) set({ isGameOver: true, winner: 'white', gameStatus: 'checkmate' });
+  }
+},
 
   setGameMode: (mode) => {
     set({ gameMode: mode, selectedSquare: null, validMoves: [] });
@@ -241,6 +276,7 @@ export const useChessStore = create<GameState & GameActions>((set, get) => ({
 
   resetGame: () => {
     const newChess = new Chess();
+    const m = get().clockMinutes;
     set({
       chess: newChess,
       gameStatus: 'playing',
@@ -248,6 +284,7 @@ export const useChessStore = create<GameState & GameActions>((set, get) => ({
       lastMove: null, history: [],
       currentPlayer: 'white', isGameOver: false, winner: null,
       pendingPromotion: null,
+      timeWhite: m*60*1000, timeBlack: m*60*1000,
       evalCp: 0,
       evalMate: null,
     });

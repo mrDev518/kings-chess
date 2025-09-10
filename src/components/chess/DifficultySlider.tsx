@@ -38,7 +38,7 @@ export const DifficultySlider: React.FC<DifficultySliderProps> = ({
         <Slider
           value={[pending]}
           min={200}
-          max={2500}              // 🔥 lowered from 3000 → 2500
+          max={2500}              
           step={50}
           onValueChange={(v) => setPending((Array.isArray(v) ? v[0] : v) as number)}
           disabled={disabled}

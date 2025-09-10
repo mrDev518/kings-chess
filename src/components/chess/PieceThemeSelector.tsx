@@ -12,9 +12,7 @@ interface PieceThemeSelectorProps {
 
 const themeOptions: { value: PieceTheme; label: string; description: string }[] = [
   { value: 'classic', label: 'Classic', description: 'Unicode pieces' },
-  { value: 'alpha',   label: 'Alpha',   description: 'Letters in tokens' },
-  { value: 'neo',     label: 'Neo',     description: 'Bold modern tokens' },
-  { value: 'solid',   label: 'Solid',   description: 'Solid disks + initials' },
+
   { value: 'line',    label: 'Line',    description: 'Outlined initials' },
 ];
 
