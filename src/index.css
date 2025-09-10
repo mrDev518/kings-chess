@@ -232,4 +232,25 @@ All colors MUST be HSL.
   .piece-move-animation {
     animation: piece-move 0.3s ease-in-out;
   }
+.chess-board {
+  display: grid;
+  grid-template-columns: repeat(8, 1fr);
+  aspect-ratio: 1/1;
+  border: 8px solid var(--board-border);
+  border-radius: 16px;
+  overflow: hidden;
 }
+.square {
+  position: relative;
+  width: 100%;
+  height: 100%;
+}
+.square.light { background: var(--board-light); }
+.square.dark  { background: var(--board-dark); }
+.piece[data-kind="P"][data-color="w"]::after { content: "♙"; }
+.piece[data-kind="P"][data-color="b"]::after { content: "♟"; }
+/* …etc for all kinds */
+
+
+}
+

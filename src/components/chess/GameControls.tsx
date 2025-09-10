@@ -1,120 +1,121 @@
-import React from 'react';
-import { Button } from '@/components/ui/button';
-import { Card } from '@/components/ui/card';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { useChessStore } from '@/store/chessStore';
-import { RotateCcw, Users, Bot, SkipBack } from 'lucide-react';
 
-export const GameControls: React.FC = () => {
-  const { 
-    gameMode, 
-    gameStatus, 
-    currentPlayer, 
-    isGameOver, 
-    winner,
-    history,
-    isThinking,
-    setGameMode, 
-    resetGame, 
-    undoMove 
-  } = useChessStore();
+import React, { useMemo, useState } from 'react';
+import { ThemeName } from '../../../theme/themes';
+import { useTheme } from '../../../theme/ThemeContext';
+import Modal from '../common/Modal';
+import { SFX } from '../../sfx/sfxstore';
 
-  const getStatusText = () => {
-    if (isThinking) {
-      return 'AI is thinking...';
-    }
-    
-    if (isGameOver) {
-      if (winner === 'draw') {
-        return 'Game ended in a draw';
-      }
-      return `${winner === 'white' ? 'White' : 'Black'} wins by checkmate!`;
-    }
-    
-    if (gameStatus === 'check') {
-      return `${currentPlayer === 'white' ? 'White' : 'Black'} is in check!`;
-    }
-    
-    return `${currentPlayer === 'white' ? 'White' : 'Black'} to move`;
+type Props = {
+  onApplyStartingSide: (side: 'w' | 'b') => void;
+  onStart: () => void;
+  onClockToggle: (on: boolean) => void;
+  onClockMinutesChange: (m: number) => void;
+  clockEnabled: boolean;
+  clockMinutes: number;
+};
+
+const GameControls: React.FC<Props> = ({
+  onApplyStartingSide,
+  onStart,
+  onClockToggle,
+  onClockMinutesChange,
+  clockEnabled,
+  clockMinutes
+}) => {
+  const { theme, setThemeByName } = useTheme();
+  const [pendingTheme, setPendingTheme] = useState<ThemeName>(theme.name);
+  const themeNames: ThemeName[] = useMemo(() => ['Alpha', 'Neo', 'Solid'], []);
+  const [fxOpen, setFxOpen] = useState(false);
+  const [volume, setVolume] = useState<number>(SFX.volume);
+
+  const applyTheme = () => {
+    setThemeByName(pendingTheme);
+    SFX.play('applyTheme');
   };
 
-  const getStatusClass = () => {
-    let baseClass = 'game-status';
-    
-    if (isThinking) {
-      baseClass += ' thinking';
-    } else if (isGameOver) {
-      baseClass += ' checkmate';
-    } else if (gameStatus === 'check') {
-      baseClass += ' check';
-    } else {
-      baseClass += currentPlayer === 'white' ? ' white-turn' : ' black-turn';
-    }
-    
-    return baseClass;
+  const applySide = (side: 'w' | 'b') => {
+    onApplyStartingSide(side);
+    SFX.play('applySide');
+  };
+
+  const openFX = () => {
+    setFxOpen(true);
+    SFX.play('fxOpen');
   };
 
   return (
-    <div className="space-y-4">
-      {/* Game Mode Selection */}
-      <Card className="p-4">
-        <div className="space-y-3">
-          <label className="text-sm font-medium text-muted-foreground">
-            Game Mode
+    <div className="controls">
+      <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+        <label>Theme:</label>
+        <select
+          value={pendingTheme}
+          onChange={(e) => setPendingTheme(e.target.value as ThemeName)}
+        >
+          {themeNames.map((t) => (
+            <option key={t} value={t}>{t}</option>
+          ))}
+        </select>
+        <button className="button" onClick={applyTheme}>Apply Theme</button>
+      </div>
+
+      <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+        <label>Starting Side:</label>
+        <button className="button" onClick={() => applySide('w')}>White</button>
+        <button className="button" onClick={() => applySide('b')}>Black</button>
+      </div>
+
+      <button className="button primary" onClick={() => { SFX.play('uiClick'); onStart(); }}>
+        Start Match
+      </button>
+
+      <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+        <label>Clock:</label>
+        <button className="button" onClick={() => onClockToggle(!clockEnabled)}>
+          {clockEnabled ? 'On' : 'Off'}
+        </button>
+        <select
+          value={String(clockMinutes)}
+          onChange={(e) => onClockMinutesChange(parseInt(e.target.value, 10))}
+          disabled={!clockEnabled}
+        >
+          <option value="3">3 min</option>
+          <option value="10">10 min</option>
+        </select>
+      </div>
+
+      <button className="button" onClick={openFX}>
+        FX
+      </button>
+
+      <Modal open={fxOpen} onClose={() => setFxOpen(false)} title="Sound FX">
+        <div style={{ display: 'grid', gap: 10 }}>
+          <label>
+            <span style={{ marginRight: 10 }}>Enable</span>
+            <input
+              type="checkbox"
+              checked={SFX.enabled}
+              onChange={(e) => (SFX.enabled = e.target.checked)}
+            />
           </label>
-          <Select value={gameMode} onValueChange={setGameMode}>
-            <SelectTrigger>
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="friend">
-                <div className="flex items-center gap-2">
-                  <Users className="h-4 w-4" />
-                  Play vs Friend
-                </div>
-              </SelectItem>
-              <SelectItem value="bot">
-                <div className="flex items-center gap-2">
-                  <Bot className="h-4 w-4" />
-                  Play vs Bot
-                </div>
-              </SelectItem>
-            </SelectContent>
-          </Select>
+          <label>
+            Volume
+            <input
+              type="range"
+              min={0}
+              max={1}
+              step={0.01}
+              value={volume}
+              onChange={(e) => {
+                const v = parseFloat(e.target.value);
+                setVolume(v);
+                SFX.volume = v;
+              }}
+            />
+          </label>
         </div>
-      </Card>
-
-      {/* Game Status */}
-      <Card className="p-4">
-        <div className={getStatusClass()}>
-          {getStatusText()}
-        </div>
-      </Card>
-
-      {/* Game Controls */}
-      <Card className="p-4">
-        <div className="space-y-3">
-          <Button 
-            onClick={resetGame}
-            className="w-full"
-            variant="outline"
-          >
-            <RotateCcw className="h-4 w-4 mr-2" />
-            New Game
-          </Button>
-          
-          {history.length > 0 && !isGameOver && !isThinking && (
-            <Button 
-              onClick={undoMove}
-              className="w-full"
-              variant="secondary"
-            >
-              <SkipBack className="h-4 w-4 mr-2" />
-              Undo Move
-            </Button>
-          )}
-        </div>
-      </Card>
+      </Modal>
     </div>
   );
 };
+
+export default GameControls;

@@ -1,85 +1,135 @@
-import React from 'react';
-import { ChessBoard } from './ChessBoard';
-import { GameControls } from './GameControls';
-import { MoveHistory } from './MoveHistory';
-import { PromotionDialog } from './PromotionDialog';
-import { SettingsPanel } from './SettingsPanel';
-import { EvalBar } from './EvalBar';
-import { Crown, Eye, EyeOff } from 'lucide-react';
-import { useChessStore } from '@/store/chessStore';
-import { Card } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
+import React, { useCallback, useRef, useState } from 'react';
+import { Chess, Square } from 'chess.js';
+import { useTheme } from '../../../theme/ThemeContext';
+import GameControls from './GameControls';
+import CountdownOverlay from './CountdownOverlay';
+import { SFX, playPieceMove } from '../../sfx/sfxstore';
+import ChessClock, { ClockSide } from './Clock';
 
-export const ChessGame: React.FC = () => {
-  const {
-    pieceTheme, difficulty, gameMode, history,
-    playerSide, setPieceTheme, setDifficulty,
-    setPlayerSide, applyStartingSide,
-    showEval, toggleShowEval,
-  } = useChessStore();
+// Use chess.js's Square type instead of plain string
+type Move = { from: Square; to: Square; promotion?: string };
+
+const files = ['a','b','c','d','e','f','g','h'] as const;
+const ranks = ['8','7','6','5','4','3','2','1'] as const;
+
+const ChessGame: React.FC = () => {
+  const { theme } = useTheme();
+  const gameRef = useRef(new Chess());
+  const [, forceTick] = useState(0);
+  const [counting, setCounting] = useState(false);
+  const [clockEnabled, setClockEnabled] = useState(true);
+  const [clockMinutes, setClockMinutes] = useState(3);
+  const [runningSide, setRunningSide] = useState<ClockSide | null>(null);
+
+  // Track the first clicked square (typed as Square)
+  const handleSquareClick = useRef<{ from?: Square }>({});
+
+  const onSquareClick = (sq: Square) => {
+    const sel = handleSquareClick.current.from;
+    if (!sel) {
+      handleSquareClick.current.from = sq;
+      SFX.play('uiClick');
+      return;
+    }
+    const move: Move = { from: sel, to: sq };
+    const result = gameRef.current.move(move as any); // chess.js expects its own Move type; any avoids friction here
+    handleSquareClick.current.from = undefined;
+    if (result) {
+      // play piece-move sound by the piece moved
+      playPieceMove(result.piece.toUpperCase());
+      // Flip clock turn
+      if (clockEnabled) setRunningSide(gameRef.current.turn() as ClockSide);
+      forceTick((n) => n + 1);
+    } else {
+      SFX.play('uiClick');
+    }
+  };
+
+  const applyStartingSide = (side: 'w' | 'b') => {
+    const g = new Chess();
+    if (side === 'b') {
+      // If starting as black, you can flip board orientation in render (not handled here).
+    }
+    gameRef.current = g;
+    setRunningSide(null);
+    forceTick((n) => n + 1);
+  };
+
+  const onStart = useCallback(() => {
+    setCounting(true);
+  }, []);
+
+  const onCountdownDone = useCallback(() => {
+    setCounting(false);
+    if (clockEnabled) {
+      // White starts
+      setRunningSide('w');
+    }
+  }, [clockEnabled]);
+
+  const onClockToggle = (on: boolean) => {
+    setClockEnabled(on);
+    if (!on) setRunningSide(null);
+  };
+
+  const onClockMinutesChange = (m: number) => {
+    setClockMinutes(m);
+    // resetting of internal clock handled by Clock component upon prop change
+  };
 
   return (
-    <div className="container mx-auto px-2 sm:px-4 py-4">
-      <div className="flex items-center justify-between mb-4">
-        <div className="flex items-center gap-2">
-          <Crown className="h-5 w-5 text-primary" />
-          <h1 className="text-xl font-bold">King’s Chess</h1>
-        </div>
+    <div style={{ display: 'grid', gap: 12 }}>
+      <GameControls
+        onApplyStartingSide={applyStartingSide}
+        onStart={onStart}
+        onClockToggle={onClockToggle}
+        onClockMinutesChange={onClockMinutesChange}
+        clockEnabled={clockEnabled}
+        clockMinutes={clockMinutes}
+      />
 
-        <Button variant="outline" size="sm" onClick={toggleShowEval} className="gap-2">
-          {showEval ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-          {showEval ? 'Hide Eval' : 'Show Eval'}
-        </Button>
+      {clockEnabled && (
+        <ChessClock
+          initialMinutes={clockMinutes}
+          runningSide={runningSide}
+          onFlag={(side) => {
+            alert(`${side === 'w' ? 'White' : 'Black'} flagged!`);
+            setRunningSide(null);
+          }}
+        />
+      )}
+
+      <div className="chess-board" data-board-style={theme.boardStyle}>
+        {ranks.map((r, ri) =>
+          files.map((f, fi) => {
+            const sq = `${f}${r}` as Square; // <<— typed as Square
+            const isDark = (ri + fi) % 2 === 1;
+            const p = gameRef.current.get(sq); // get() now receives a Square
+
+            return (
+              <div
+                key={sq}
+                className={`square ${isDark ? 'dark' : 'light'}`}
+                onClick={() => onSquareClick(sq)}
+              >
+                {p && (
+                  <div
+                    className="piece"
+                    draggable={false}
+                    data-kind={p.type.toUpperCase()}
+                    data-color={p.color}
+                    data-style={theme.pieceStyle}
+                  />
+                )}
+              </div>
+            );
+          })
+        )}
       </div>
 
-      {/* Fixed 3-column shell to prevent layout jumping */}
-      <div className="grid gap-6
-                      grid-cols-1
-                      xl:grid-cols-[minmax(0,80px)_minmax(0,740px)_minmax(0,360px)]">
-        {/* Eval column (keeps space even when hidden) */}
-        <div className="order-3 xl:order-1">
-          <div className="sticky top-4 h-[640px]">
-            {showEval ? (
-              <EvalBar />
-            ) : (
-              <Card className="p-2 h-full flex items-center justify-center text-xs text-muted-foreground">
-                Eval hidden
-              </Card>
-            )}
-          </div>
-        </div>
-
-        {/* Board column */}
-        <div className="order-1 xl:order-2">
-          <div className="mx-auto max-w-[740px]">
-            <ChessBoard />
-          </div>
-        </div>
-
-        {/* Sidebar column */}
-        <div className="order-2 xl:order-3">
-          <div className="space-y-4">
-            <GameControls />
-            <SettingsPanel
-              pieceTheme={pieceTheme}
-              difficulty={difficulty}
-              gameMode={gameMode}
-              onPieceThemeChange={(t) => setPieceTheme(t)}
-              onDifficultyApply={(elo) => setDifficulty(elo)}
-              isGameActive={history.length > 0}
-              playerSide={playerSide}
-              onPlayerSideChange={(s) => setPlayerSide(s)}
-              onApplyStartingSide={() => applyStartingSide()}
-            />
-          </div>
-        </div>
-      </div>
-
-      <div className="mt-6">
-        <MoveHistory />
-      </div>
-
-      <PromotionDialog />
+      {counting && <CountdownOverlay onDone={onCountdownDone} />}
     </div>
   );
 };
+
+export default ChessGame;
