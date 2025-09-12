@@ -11,7 +11,7 @@ import { useChessStore } from '@/store/chessStore';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 
-/** Mini eval graph for the review column */
+/** Mini eval graph for the review sidebar */
 function EvalGraphInline({ cps }:{ cps:number[] }) {
   if (!cps.length) {
     return (
@@ -20,7 +20,7 @@ function EvalGraphInline({ cps }:{ cps:number[] }) {
       </div>
     );
   }
-  const width = 320, height = 120, max = 600;
+  const width = 280, height = 120, max = 600;
   const pts = cps.map((cp, i) => {
     const x = (i / Math.max(1, cps.length - 1)) * width;
     const y = height/2 - Math.max(-max, Math.min(max, cp)) * (height/2) / max;
@@ -52,11 +52,9 @@ export const ChessGame: React.FC = () => {
       ? `${evalCp >= 0 ? '+' : ''}${(evalCp / 100).toFixed(2)}`
       : '—';
 
-  // Build numbered SAN (export text)
+  // Numbered SAN for export
   const numberedSAN = useMemo(() => {
-  const moves = useChessStore.getState().moves;
-  const s = useChessStore.getState();    
-  const san = s.chess.history();    
+    const moves = useChessStore.getState().moves;
     if (!moves.length) {
       const san = useChessStore.getState().chess.history();
       let out = ''; let n = 1;
@@ -171,38 +169,10 @@ export const ChessGame: React.FC = () => {
         </div>
       </div>
 
-      {/* FOUR COLUMNS (xl): TOOLS | BOARD | EVAL | HISTORY */}
-      <div className="grid gap-4 grid-cols-1 xl:grid-cols-[minmax(0,340px)_minmax(0,740px)_minmax(0,80px)_minmax(0,360px)] items-start">
-        {/* TOOLS (left) */}
-        <div className="order-2 xl:order-1 space-y-4">
-          <Card className="p-4">
-            <GameControls />
-          </Card>
-
-          <Card className="p-4">
-            <SettingsPanel
-              pieceTheme={pieceTheme}
-              difficulty={difficulty}
-              gameMode={gameMode}
-              onPieceThemeChange={setPieceTheme}
-              onDifficultyApply={setDifficulty}
-              isGameActive={history.length > 0}
-              playerSide={playerSide}
-              onPlayerSideChange={setPlayerSide}
-              onApplyStartingSide={applyStartingSide}
-            />
-          </Card>
-        </div>
-
-        {/* BOARD (center-left) */}
-        <div className="order-1 xl:order-2">
-          <div className="mx-auto max-w-[740px]">
-            <ChessBoard />
-          </div>
-        </div>
-
-        {/* EVAL BAR (center-right, sticky) */}
-        <div className="order-3 xl:order-3">
+      {/* TOP ROW: Eval (left) | Board (center) | History/Review (right) */}
+      <div className="grid gap-4 grid-cols-1 xl:grid-cols-[minmax(0,80px)_minmax(0,740px)_minmax(0,360px)] items-start">
+        {/* Eval column (sticky) */}
+        <div className="order-3 xl:order-1">
           <div className="sticky top-4 h-[640px]">
             {showEval ? (
               <EvalBar />
@@ -214,8 +184,15 @@ export const ChessGame: React.FC = () => {
           </div>
         </div>
 
-        {/* HISTORY / REVIEW (right) */}
-        <div className="order-4 xl:order-4 space-y-4">
+        {/* Board column */}
+        <div className="order-1 xl:order-2">
+          <div className="mx-auto max-w-[740px]">
+            <ChessBoard />
+          </div>
+        </div>
+
+        {/* Right column: small move history + review graph + import/export */}
+        <div className="order-2 xl:order-3 space-y-4">
           <Card className="p-3">
             <div className="flex items-center justify-between mb-2">
               <div className="text-sm font-semibold">Move History</div>
@@ -223,7 +200,7 @@ export const ChessGame: React.FC = () => {
                 {reviewOn ? 'Hide Review' : 'Review Game'}
               </Button>
             </div>
-            <div className="max-h-[340px] overflow-auto rounded border">
+            <div className="max-h-[260px] overflow-auto rounded border">
               <MoveHistory />
             </div>
           </Card>
@@ -253,6 +230,27 @@ export const ChessGame: React.FC = () => {
             </p>
           </Card>
         </div>
+      </div>
+
+      {/* BOTTOM ROW: Tools */}
+      <div className="grid gap-4 grid-cols-1 md:grid-cols-2 xl:grid-cols-3 mt-6">
+        <Card className="p-4">
+          <GameControls />
+        </Card>
+
+        <Card className="p-4 md:col-span-1 xl:col-span-2">
+          <SettingsPanel
+            pieceTheme={pieceTheme}
+            difficulty={difficulty}
+            gameMode={gameMode}
+            onPieceThemeChange={setPieceTheme}
+            onDifficultyApply={setDifficulty}
+            isGameActive={history.length > 0}
+            playerSide={playerSide}
+            onPlayerSideChange={setPlayerSide}
+            onApplyStartingSide={applyStartingSide}
+          />
+        </Card>
       </div>
 
       <PromotionDialog />
