@@ -9,34 +9,36 @@ const unicode: Record<'w'|'b', Record<Piece['type'], string>> = {
   b: { k:'♚', q:'♛', r:'♜', b:'♝', n:'♞', p:'♟' },
 };
 
-function lineIconCandidates(color: 'w'|'b', type: Piece['type']) {
-  // Your folder has e.g. Chess_kdt45.svg (dark/black), Chess_klt45.svg (light/white),
-  // sometimes duplicated with uppercase first letter.
+// Your file pattern: Chess_kdt45.svg / Chess_klt45.svg etc.
+function svgCandidates(base: string, color: 'w'|'b', type: Piece['type']) {
   const suffix = color === 'w' ? 'lt45' : 'dt45';
-  const tLower = type;                 // k q r b n p
-  const tUpper = type.toUpperCase();   // K Q R B N P
+  const tLower = type;
+  const tUpper = type.toUpperCase() as Uppercase<Piece['type']>;
   return [
-    `/pieces/line/Chess_${tLower}${suffix}.svg`,
-    `/pieces/line/Chess_${tUpper}${suffix}.svg`,
+    `${base}/Chess_${tLower}${suffix}.svg`,
+    `${base}/Chess_${tUpper}${suffix}.svg`,
   ];
 }
 
 export const ChessPiece: React.FC<ChessPieceProps> = ({ piece, isSelected }) => {
-  const { pieceTheme, pieceSize } = useChessStore();
-
+  const { pieceTheme, themeDefs, pieceSize } = useChessStore();
   const px = useMemo(() => (pieceSize === 'small' ? 48 : pieceSize === 'large' ? 96 : 72), [pieceSize]);
   const wrapper = `flex items-center justify-center transition-transform ${isSelected ? 'scale-110' : ''}`;
 
+  const base = themeDefs[pieceTheme]?.pieceAssetBase; // '/pieces/line' (or classic/neo later)
   const [idx, setIdx] = useState(0);
+
   const candidates = useMemo(
-    () => (pieceTheme === 'line' ? lineIconCandidates(piece.color, piece.type) : []),
-    [pieceTheme, piece.color, piece.type]
+    () => (base ? svgCandidates(base, piece.color, piece.type) : []),
+    [base, piece.color, piece.type]
   );
 
-  // Fallback to unicode if theme not "line" or no icon found
-  if (pieceTheme !== 'line' || idx >= candidates.length) {
+  // Fallback to Unicode if no asset or load error
+  if (!base || idx >= candidates.length) {
     const sym = unicode[piece.color][piece.type];
-    const fg = piece.color === 'w' ? 'var(--piece-white-fg, #efefef)' : 'var(--piece-black-fg, #111213)';
+    const fg = piece.color === 'w'
+      ? 'var(--piece-white-fg, #efefef)'
+      : 'var(--piece-black-fg, #111213)';
     return (
       <div className={wrapper} style={{ color: fg, fontSize: `${px * 0.9}px`, lineHeight: 1 }}>
         {sym}

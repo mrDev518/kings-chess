@@ -181,16 +181,6 @@ export const ChessBoard: React.FC = () => {
         .rumble { animation: rumble 0.42s linear 0s 1; }
       `}</style>
 
-      {/* Local piece-ink toggle (optional) */}
-      <button
-        onClick={() => setLightMode(v => !v)}
-        className="absolute -top-3 left-0 z-20 text-xs px-2 py-1 rounded-full bg-muted border flex items-center gap-1 shadow"
-        title="Toggle piece ink (light/dark)"
-      >
-        {lightMode ? <Sun className="h-3 w-3" /> : <Moon className="h-3 w-3" />}
-        {lightMode ? 'Light' : 'Dark'}
-      </button>
-
       <div
         ref={boardRef}
         className={`relative grid grid-cols-8 grid-rows-8 gap-0 rounded-xl overflow-hidden border ${
@@ -289,8 +279,8 @@ export const ChessBoard: React.FC = () => {
       </div>
 
       {/* Hidden audio elements (always on) */}
-      <audio ref={pawnAudioRef} src="/assets/sounds/pawn-move.mp3" preload="auto" />
-      <audio ref={pieceAudioRef} src="/assets/sounds/piece-move.mp3" preload="auto" />
+      <audio ref={pawnAudioRef} src="/sounds/pawn-move.mp3" preload="auto" />
+      <audio ref={pieceAudioRef} src="/sounds/piece-move.mp3" preload="auto" />
     </div>
   );
 };

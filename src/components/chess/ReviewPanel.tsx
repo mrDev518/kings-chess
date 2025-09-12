@@ -3,7 +3,7 @@ import { Chess } from 'chess.js';
 import { useChessStore } from '@/store/chessStore';
 
 export default function ReviewPanel() {
-  const { moves } = useChessStore();
+  const { moves, setReviewCursor, setPreviewPosition, reviewCursor } = useChessStore();
   const cpVals = moves.map(m =>
     m.evalAfter?.mate != null ? (m.evalAfter.mate > 0 ? 10000 : -10000) : (m.evalAfter?.cp ?? 0)
   );
@@ -27,31 +27,25 @@ export default function ReviewPanel() {
           Prev Mistake
         </button>
       </div>
-
-      {/* If you later add engine helpers, you can show best line and training here */}
-      {/* <BestLineWidget /> */}
-      {/* <TrainingMode /> */}
     </div>
   );
 }
 
 function EvalGraph({ cps }:{ cps:number[] }) {
   const width = 480, height = 120;
-  const max = 600; // ±6.0
+  const max = 600;
   const pts = cps.map((cp,i) => {
-    const x = (i/(Math.max(1, cps.length-1))) * width;
-    const y = height/2 - Math.max(-max, Math.min(max, cp)) * (height/2) / max;
+    const x = (i / Math.max(1, cps.length - 1)) * width;
+    const y = height / 2 - Math.max(-max, Math.min(max, cp)) * (height / 2) / max;
     return `${x},${y}`;
   }).join(' ');
   return (
     <svg width={width} height={height} className="block">
-      <line x1="0" y1={height/2} x2={width} y2={height/2} stroke="currentColor" opacity={0.2}/>
-      <polyline points={pts} fill="none" stroke="currentColor" strokeWidth="2"/>
+      <line x1="0" y1={height/2} x2={width} y2={height/2} stroke="currentColor" opacity={0.2} />
+      <polyline points={pts} fill="none" stroke="currentColor" strokeWidth="2" />
     </svg>
   );
 }
-
-/* ---------- navigation helpers ---------- */
 
 function findIndexFrom(from:number, dir:1|-1, pred:(m:any)=>boolean, arr:any[]) {
   for (let i = from + dir; i >= 0 && i < arr.length; i += dir) {
@@ -59,22 +53,19 @@ function findIndexFrom(from:number, dir:1|-1, pred:(m:any)=>boolean, arr:any[]) 
   }
   return -1;
 }
-
 function jumpToMoveIndex(i:number) {
   const s = useChessStore.getState();
   const temp = new Chess();
-  for (let k = 0; k <= i; k++) temp.move(s.moves[k].san); // rebuild up to i
+  for (let k=0; k<=i; k++) temp.move(s.moves[k].san);
   s.setReviewCursor(i);
   s.setPreviewPosition(temp.fen());
 }
-
 function jumpToNext(pred:(m:any)=>boolean) {
   const s = useChessStore.getState();
   const start = s.reviewCursor ?? -1;
   const idx = findIndexFrom(start, 1, pred, s.moves);
   if (idx >= 0) jumpToMoveIndex(idx);
 }
-
 function jumpToPrev(pred:(m:any)=>boolean) {
   const s = useChessStore.getState();
   const start = s.reviewCursor ?? s.moves.length;
