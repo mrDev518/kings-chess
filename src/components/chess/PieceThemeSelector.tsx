@@ -10,11 +10,12 @@ interface PieceThemeSelectorProps {
   onThemeChange: (theme: PieceTheme) => void;   // called on Apply only
 }
 
-const themeOptions: { value: PieceTheme; label: string; description: string }[] = [
+const themeOptions = [
   { value: 'classic', label: 'Classic', description: 'Unicode pieces' },
-
   { value: 'line',    label: 'Line',    description: 'Outlined initials' },
-];
+  { value: 'neo',     label: 'Neo',     description: 'Modern glyph set' },
+] as const;
+
 
 export const PieceThemeSelector: React.FC<PieceThemeSelectorProps> = ({
   currentTheme,

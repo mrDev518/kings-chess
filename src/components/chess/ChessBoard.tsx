@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Square, Move } from 'chess.js';
+import { Chess, Square, Move } from 'chess.js';
 import { useChessStore } from '@/store/chessStore';
 import { ChessPiece } from './ChessPiece';
 import { Sun, Moon } from 'lucide-react';
@@ -15,13 +15,36 @@ const readBool = (k: string, def = false) => {
 const writeBool = (k: string, v: boolean) => localStorage.setItem(k, String(v));
 
 export const ChessBoard: React.FC = () => {
-  const { chess, selectedSquare, validMoves, lastMove, gameStatus, selectSquare, viewSide } = useChessStore();
+  const {
+    chess,
+    selectedSquare,
+    validMoves,
+    lastMove,
+    gameStatus,
+    selectSquare,
+    viewSide,
+    pieceTheme,
+    themeDefs,
+    previewFEN,
+  } = useChessStore();
+
+  // Render position: review uses previewFEN if present, otherwise live game
+  const renderFen = previewFEN ?? chess.fen();
+  const renderPos = useMemo(() => {
+    try { return new Chess(renderFen); } catch { return chess; }
+  }, [renderFen, chess]);
 
   // Orientation: files/ranks depend on viewSide
   const files = viewSide === 'w' ? ['a','b','c','d','e','f','g','h'] : ['h','g','f','e','d','c','b','a'];
   const ranks = viewSide === 'w' ? ['8','7','6','5','4','3','2','1'] : ['1','2','3','4','5','6','7','8'];
 
-  // Light/Dark board toggle (kept)
+  // Theme palette
+  const theme = themeDefs[pieceTheme];
+  const boardLight = theme.board.light;
+  const boardDark  = theme.board.dark;
+  const hl = theme.highlight; // { move, capture, last, check }
+
+  // Optional local piece FG toggle (kept; independent of theme)
   const [lightMode, setLightMode] = useState(readBool('chess-light-mode', false));
   useEffect(() => writeBool('chess-light-mode', lightMode), [lightMode]);
 
@@ -40,7 +63,7 @@ export const ChessBoard: React.FC = () => {
     return moves.length ? moves[moves.length - 1] : null;
   }, [chess, chess.history().length]);
 
-  // Visual effects (particles) + play sounds per moved piece
+  // Visual effects (particles) + play sounds per moved piece (from LIVE game state)
   useEffect(() => {
     if (!lastVerboseMove) return;
 
@@ -48,7 +71,7 @@ export const ChessBoard: React.FC = () => {
     const to = lastVerboseMove.to as string;
     const movedPiece = (lastVerboseMove as any).piece as string; // 'p','r','n','b','q','k'
 
-    // Particles on capture (no synth sound anymore)
+    // Particles on capture
     if (flags.includes('c') || flags.includes('e')) {
       const el = squareRefs.current[to];
       if (el && boardRef.current) {
@@ -64,7 +87,7 @@ export const ChessBoard: React.FC = () => {
       }
     }
 
-    // Simple board shake on castling (kept visual only; no audio)
+    // Board shake on castling
     if (flags.includes('k') || flags.includes('q')) {
       if (boardRef.current) {
         boardRef.current.classList.add('rumble');
@@ -77,11 +100,9 @@ export const ChessBoard: React.FC = () => {
       if (!el) return;
       try { el.currentTime = 0; el.play(); } catch {}
     };
-    if (movedPiece === 'p') {
-      play(pawnAudioRef.current);
-    } else {
-      play(pieceAudioRef.current);
-    }
+    if (movedPiece === 'p') play(pawnAudioRef.current);
+    else play(pieceAudioRef.current);
+
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [lastVerboseMove?.san]);
 
@@ -95,10 +116,45 @@ export const ChessBoard: React.FC = () => {
     return () => clearInterval(t);
   }, [particles.length]);
 
-  const onSquareClick = (square: Square) => selectSquare(square);
+  const onSquareClick = (square: Square) => {
+    // If in review preview (detached position), allow clicks only if you want to route training interactions.
+    // For safety, block clicks when previewFEN is active to avoid confusing live game state.
+    if (previewFEN) return;
+    selectSquare(square);
+  };
+
   const validTargets = useMemo(() => new Set(validMoves), [validMoves]);
 
-  // Light/dark piece fg variables
+  // Determine "in check" king square from the *rendered* position (preview or live)
+  const checkSquare: string | null = useMemo(() => {
+    if (!renderPos.inCheck()) return null;
+    const turn = renderPos.turn(); // side currently to move is in check
+    // find that king
+    for (const r of renderPos.board()) {
+      for (const sq of r) {
+        if (sq && sq.type === 'k' && sq.color === turn) {
+          // need its algebraic square
+          // We'll recompute via scan across files/ranks map
+        }
+      }
+    }
+    // Fallback: derive from FEN board scanning since chess.js board() misses square coord
+    // We'll compute map by rebuilding squares from ranks/files.
+    const origFiles = ['a','b','c','d','e','f','g','h'];
+    const origRanks = ['8','7','6','5','4','3','2','1'];
+    const b = renderPos.board();
+    for (let r=0; r<8; r++){
+      for (let f=0; f<8; f++){
+        const sq = b[r][f];
+        if (sq && sq.type==='k' && sq.color===turn){
+          return `${origFiles[f]}${origRanks[r]}`;
+        }
+      }
+    }
+    return null;
+  }, [renderPos]);
+
+  // Light/dark piece fg variables (doesn't override theme colors)
   const boardVars: React.CSSProperties = lightMode
     ? { ['--piece-white-fg' as any]: '#111', ['--piece-black-fg' as any]: '#111' }
     : { ['--piece-white-fg' as any]: '#efefef', ['--piece-black-fg' as any]: '#121212' };
@@ -125,17 +181,15 @@ export const ChessBoard: React.FC = () => {
         .rumble { animation: rumble 0.42s linear 0s 1; }
       `}</style>
 
-      {/* Light/Dark toggle */}
+      {/* Local piece-ink toggle (optional) */}
       <button
         onClick={() => setLightMode(v => !v)}
         className="absolute -top-3 left-0 z-20 text-xs px-2 py-1 rounded-full bg-muted border flex items-center gap-1 shadow"
-        title="Toggle light/dark board"
+        title="Toggle piece ink (light/dark)"
       >
         {lightMode ? <Sun className="h-3 w-3" /> : <Moon className="h-3 w-3" />}
         {lightMode ? 'Light' : 'Dark'}
       </button>
-
-      {/* (FX toggle removed by request) */}
 
       <div
         ref={boardRef}
@@ -150,10 +204,10 @@ export const ChessBoard: React.FC = () => {
             const isLightSquare = (rIdx + fIdx) % 2 === 0;
             const isSelected = selectedSquare === square;
             const isValidTarget = validTargets.has(square);
-            const isLastMove = lastMove && (lastMove.from === square || lastMove.to === square);
+            const isLast = lastMove && (lastMove.from === square || lastMove.to === square);
+            const isCheckSq = checkSquare === square;
 
-            const lightBg = lightMode ? 'bg-[hsl(0,0%,94%)]' : 'bg-muted/50';
-            const darkBg  = lightMode ? 'bg-[hsl(0,0%,80%)]' : 'bg-muted/90';
+            const baseBg = isLightSquare ? boardLight : boardDark;
 
             return (
               <div
@@ -162,16 +216,33 @@ export const ChessBoard: React.FC = () => {
                 onClick={() => onSquareClick(square)}
                 className={[
                   'relative flex items-center justify-center select-none',
-                  isLightSquare ? lightBg : darkBg,
-                  isSelected ? 'outline outline-2 outline-primary' : '',
-                  isLastMove ? 'ring ring-primary/40' : '',
-                  isValidTarget ? 'cursor-pointer' : 'cursor-default'
+                  isValidTarget ? 'cursor-pointer' : (previewFEN ? 'cursor-not-allowed' : 'cursor-default')
                 ].join(' ')}
-                style={{ userSelect: 'none' }}
+                style={{
+                  userSelect: 'none',
+                  background: baseBg,
+                  // outline styles from theme
+                  boxShadow: [
+                    isLast ? `inset 0 0 0 3px ${hl.last}` : '',
+                    isSelected ? `inset 0 0 0 3px ${hl.move}` : '',
+                    isCheckSq ? `inset 0 0 0 3px ${hl.check}` : '',
+                  ].filter(Boolean).join(', ')
+                } as React.CSSProperties}
               >
-                {isValidTarget && <span className="absolute w-3 h-3 rounded-full bg-primary/40" />}
+                {/* valid-target dot */}
+                {isValidTarget && (
+                  <span
+                    className="absolute rounded-full"
+                    style={{
+                      width: 12, height: 12,
+                      background: hl.move
+                    }}
+                  />
+                )}
+
+                {/* piece from rendered position (preview or live) */}
                 {(() => {
-                  const piece = chess.get(square);
+                  const piece = renderPos.get(square);
                   return piece ? <ChessPiece piece={piece} square={square} isSelected={isSelected} /> : null;
                 })()}
               </div>

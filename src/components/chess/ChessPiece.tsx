@@ -9,46 +9,49 @@ const unicode: Record<'w'|'b', Record<Piece['type'], string>> = {
   b: { k:'♚', q:'♛', r:'♜', b:'♝', n:'♞', p:'♟' },
 };
 
-// You placed files in public/pieces/line with names like "Chess_kdt45.svg".
-function candidateURLs(color: 'w'|'b', type: Piece['type']) {
-  const c = color === 'w' ? 'l' : 'd';
+function lineIconCandidates(color: 'w'|'b', type: Piece['type']) {
+  // Your folder has e.g. Chess_kdt45.svg (dark/black), Chess_klt45.svg (light/white),
+  // sometimes duplicated with uppercase first letter.
+  const suffix = color === 'w' ? 'lt45' : 'dt45';
   const tLower = type;                 // k q r b n p
   const tUpper = type.toUpperCase();   // K Q R B N P
   return [
-    `/pieces/line/Chess_${tLower}${c}t45.svg`,
-    `/pieces/line/Chess_${tUpper}${c}t45.svg`,
-    // also try plural folder just in case:
-    `/pieces/lines/Chess_${tLower}${c}t45.svg`,
-    `/pieces/lines/Chess_${tUpper}${c}t45.svg`,
+    `/pieces/line/Chess_${tLower}${suffix}.svg`,
+    `/pieces/line/Chess_${tUpper}${suffix}.svg`,
   ];
 }
 
 export const ChessPiece: React.FC<ChessPieceProps> = ({ piece, isSelected }) => {
-  const { pieceTheme } = useChessStore();
-  const wrapper = `flex items-center justify-center ${isSelected ? 'scale-110' : ''}`;
-  const size = { width: '2.1rem', height: '2.1rem' };
+  const { pieceTheme, pieceSize } = useChessStore();
 
-  // Only use external SVGs for the "line" theme; otherwise fallback to unicode.
-  const list = useMemo(
-    () => (pieceTheme === 'line' ? candidateURLs(piece.color, piece.type) : []),
+  const px = useMemo(() => (pieceSize === 'small' ? 48 : pieceSize === 'large' ? 96 : 72), [pieceSize]);
+  const wrapper = `flex items-center justify-center transition-transform ${isSelected ? 'scale-110' : ''}`;
+
+  const [idx, setIdx] = useState(0);
+  const candidates = useMemo(
+    () => (pieceTheme === 'line' ? lineIconCandidates(piece.color, piece.type) : []),
     [pieceTheme, piece.color, piece.type]
   );
-  const [i, setI] = useState(0);
 
-  if (pieceTheme !== 'line' || i >= list.length) {
+  // Fallback to unicode if theme not "line" or no icon found
+  if (pieceTheme !== 'line' || idx >= candidates.length) {
     const sym = unicode[piece.color][piece.type];
     const fg = piece.color === 'w' ? 'var(--piece-white-fg, #efefef)' : 'var(--piece-black-fg, #111213)';
-    return <div className={wrapper} style={{ color: fg, fontSize: '1.9rem', lineHeight: 1 }}>{sym}</div>;
+    return (
+      <div className={wrapper} style={{ color: fg, fontSize: `${px * 0.9}px`, lineHeight: 1 }}>
+        {sym}
+      </div>
+    );
   }
 
   return (
     <img
-      src={list[i]}
+      src={candidates[idx]}
       alt={`${piece.color}${piece.type}`}
       draggable={false}
       className={wrapper}
-      style={size}
-      onError={() => setI((v) => v + 1)} // try next path if a file is missing
+      style={{ width: px, height: px }}
+      onError={() => setIdx((v) => v + 1)}
     />
   );
 };
