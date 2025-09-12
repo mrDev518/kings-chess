@@ -289,8 +289,8 @@ export const ChessBoard: React.FC = () => {
       </div>
 
       {/* Hidden audio elements (always on) */}
-      <audio ref={pawnAudioRef} src="/assets/sounds/pawn-move.mp3" preload="auto" />
-      <audio ref={pieceAudioRef} src="/assets/sounds/piece-move.mp3" preload="auto" />
+      <audio ref={pawnAudioRef} src="/sounds/pawn-move.mp3" preload="auto" />
+      <audio ref={pieceAudioRef} src="/sounds/piece-move.mp3" preload="auto" />
     </div>
   );
 };
