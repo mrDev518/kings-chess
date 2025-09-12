@@ -255,19 +255,19 @@ const initialGameState: GameState = {
       key: 'classic', name: 'Classic',
       board: { light: '#f0d9b5', dark: '#b58863' },
       highlight: { move:'#b4e7ff80', capture:'#ff9ea380', last:'#fff17680', check:'#ff525280' },
-      pieceAssetBase: '/pieces/line'
+      pieceAssetBase: '/assets/pieces/classic'
     },
     line: {
       key: 'line', name: 'Line',
       board: { light: '#e8e8e8', dark: '#4d4d4d' },
       highlight: { move:'#90caf980', capture:'#ffab9180', last:'#ffd54f80', check:'#ef535080' },
-      pieceAssetBase: '/pieces/line'
+      pieceAssetBase: '/assets/pieces/line'
     },
     neo: {
       key: 'neo', name: 'Neo',
       board: { light: '#cdd6f4', dark: '#1e1e2e' },
       highlight: { move:'#94e2d580', capture:'#f38ba880', last:'#f9e2af80', check:'#f38ba880' },
-      pieceAssetBase: '/pieces/line'
+      pieceAssetBase: '/assets/pieces/neo'
     },
   },
   pieceSize: (ls('chess-piece-size') as PieceSize) ?? 'medium',
